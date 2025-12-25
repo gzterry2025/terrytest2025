@@ -1,0 +1,965 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="3D粒子变形特效 - 使用Three.js创建的交互式3D粒子系统">
+    <title>3D 粒子变形特效 (Three.js)</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            overflow: hidden;
+            background: linear-gradient(135deg, #050505 0%, #1a1a2e 100%);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+            color: white;
+            user-select: none;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+
+        /* 画布全屏 */
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* 顶部状态栏 */
+        #top-ui {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 100%;
+            max-width: 500px;
+            text-align: center;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            z-index: 100;
+            padding: 0 20px;
+        }
+
+        .status-box {
+            background: rgba(20, 20, 35, 0.85);
+            border: 1px solid rgba(100, 100, 255, 0.3);
+            padding: 12px 24px;
+            border-radius: 25px;
+            display: inline-block;
+            font-size: 14px;
+            letter-spacing: 1px;
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            margin: 0 auto;
+            transition: opacity 0.4s ease, transform 0.3s ease;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+        }
+
+        #morph-status {
+            opacity: 0;
+            color: #aaa;
+            font-size: 12px;
+        }
+
+        #morph-status.show {
+            opacity: 1;
+            animation: pulse 1.5s ease-in-out;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+
+        /* 底部控制栏 */
+        #bottom-ui {
+            position: absolute;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 100%;
+            max-width: 500px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 15px;
+            pointer-events: none;
+            z-index: 100;
+            padding: 0 20px;
+        }
+
+        .control-panel {
+            pointer-events: auto;
+            background: rgba(20, 20, 35, 0.85);
+            border: 1px solid rgba(100, 100, 255, 0.3);
+            padding: 20px 30px;
+            border-radius: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 18px;
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+            transition: transform 0.3s ease;
+        }
+
+        .control-panel:hover {
+            transform: translateY(-5px);
+        }
+
+        button.main-btn {
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            border: none;
+            color: white;
+            padding: 12px 35px;
+            border-radius: 10px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(42, 82, 152, 0.4);
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        button.main-btn::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 0;
+            height: 0;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.3);
+            transform: translate(-50%, -50%);
+            transition: width 0.6s, height 0.6s;
+        }
+
+        button.main-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(42, 82, 152, 0.6);
+        }
+
+        button.main-btn:active {
+            transform: translateY(0) scale(0.98);
+        }
+
+        button.main-btn:active::before {
+            width: 300px;
+            height: 300px;
+        }
+
+        .color-controls {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .color-btn {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            border: 3px solid rgba(255, 255, 255, 0.2);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+        }
+
+        .color-btn::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 0;
+            height: 0;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.5);
+            transform: translate(-50%, -50%);
+            transition: width 0.3s, height 0.3s;
+        }
+
+        .color-btn:hover {
+            transform: scale(1.15);
+            border-color: rgba(255, 255, 255, 0.5);
+        }
+
+        .color-btn:hover::after {
+            width: 100%;
+            height: 100%;
+        }
+
+        .color-btn.active {
+            border-color: white;
+            transform: scale(1.1);
+            box-shadow: 0 0 15px rgba(255, 255, 255, 0.5);
+        }
+
+        /* 颜色按钮样式 */
+        .c-orange { background: linear-gradient(135deg, #ff9966, #ff5e62); }
+        .c-green { background: linear-gradient(135deg, #56ab2f, #a8e063); }
+        .c-blue { background: linear-gradient(135deg, #2193b0, #6dd5ed); }
+        .c-rainbow {
+            background: linear-gradient(45deg, 
+                #ff0000 0%, #ff7f00 16.66%, 
+                #ffff00 33.33%, #00ff00 50%, 
+                #0000ff 66.66%, #4b0082 83.33%, 
+                #9400d3 100%);
+        }
+
+        /* 响应式设计 */
+        @media (max-width: 768px) {
+            #top-ui {
+                top: 15px;
+                padding: 0 15px;
+            }
+
+            .status-box {
+                font-size: 12px;
+                padding: 10px 18px;
+            }
+
+            #bottom-ui {
+                bottom: 20px;
+                padding: 0 15px;
+            }
+
+            .control-panel {
+                padding: 15px 20px;
+                gap: 15px;
+            }
+
+            button.main-btn {
+                padding: 10px 25px;
+                font-size: 14px;
+            }
+
+            .color-btn {
+                width: 32px;
+                height: 32px;
+                border-width: 2px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .status-box {
+                font-size: 11px;
+                padding: 8px 15px;
+            }
+
+            button.main-btn {
+                padding: 10px 20px;
+                font-size: 13px;
+            }
+
+            .color-controls {
+                gap: 10px;
+            }
+
+            .color-btn {
+                width: 28px;
+                height: 28px;
+            }
+        }
+
+        /* 加载提示 */
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            z-index: 1000;
+            font-size: 18px;
+            opacity: 0.8;
+            transition: opacity 0.5s;
+        }
+
+        #loading.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+
+    <div id="loading">加载中...</div>
+
+    <div id="top-ui">
+        <div id="morph-status" class="status-box">Morphing...</div>
+        <div class="status-box">Shape: <span id="shape-name">Sphere</span></div>
+    </div>
+
+    <div id="bottom-ui">
+        <div class="control-panel">
+            <button class="main-btn" id="change-shape-btn">Change Shape</button>
+            <div class="color-controls">
+                <div class="color-btn c-orange active" data-color="orange"></div>
+                <div class="color-btn c-green" data-color="green"></div>
+                <div class="color-btn c-blue" data-color="blue"></div>
+                <div class="color-btn c-rainbow" data-color="rainbow"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ========== 全局配置 ==========
+        const CONFIG = {
+            particleCount: 15000,
+            particleSize: 2.5,
+            morphSpeed: 0.08,      // 粒子变形速度 (0.01 - 0.15)
+            rotationSpeed: 0.002,  // 旋转速度
+            fogDensity: 0.002      // 雾密度
+        };
+
+        // ========== 变量声明 ==========
+        let scene, camera, renderer;
+        let particles;
+        let geometry;
+        let currentShapeIndex = 0;
+        let targetPositions = [];
+        let isAnimating = false;
+        let animationFrameId = null;
+
+        // 形状配置
+        const SHAPES = [
+            { name: 'sphere', params: [120] },
+            { name: 'cube', params: [200] },
+            { name: 'pyramid', params: [200] },
+            { name: 'torus', params: [100, 30] },
+            { name: 'galaxy', params: [180] },
+            { name: 'wave', params: [250] },
+            { name: 'VRE', params: [180] }
+        ];
+
+        // 鼠标控制变量
+        let mouseX = 0;
+        let mouseY = 0;
+        let targetRotationX = 0;
+        let targetRotationY = 0;
+        let isMouseDown = false;
+        let lastMouseX = 0;
+        let lastMouseY = 0;
+
+        // 颜色配置
+        const COLOR_PALETTES = {
+            orange: new THREE.Color(0xffaa00),
+            green: new THREE.Color(0x00ff88),
+            blue: new THREE.Color(0x00aaff)
+        };
+        let currentColorMode = 'orange';
+
+        // ========== 初始化 ==========
+        function init() {
+            try {
+                // 隐藏加载提示
+                const loadingEl = document.getElementById('loading');
+                if (loadingEl) {
+                    setTimeout(() => loadingEl.classList.add('hidden'), 500);
+                }
+
+                // 1. 场景设置
+                scene = new THREE.Scene();
+                scene.fog = new THREE.FogExp2(0x050505, CONFIG.fogDensity);
+
+                // 2. 相机设置
+                camera = new THREE.PerspectiveCamera(
+                    75, 
+                    window.innerWidth / window.innerHeight, 
+                    0.1, 
+                    1000
+                );
+                camera.position.z = 400;
+
+                // 3. 渲染器设置
+                renderer = new THREE.WebGLRenderer({ 
+                    antialias: true, 
+                    alpha: true,
+                    powerPreference: "high-performance"
+                });
+                renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // 限制最大像素比以提升性能
+                renderer.setSize(window.innerWidth, window.innerHeight);
+                document.body.appendChild(renderer.domElement);
+
+                // 4. 创建粒子系统
+                createParticles();
+
+                // 5. 事件监听
+                setupEventListeners();
+
+                // 6. 开始动画循环
+                animate();
+
+            } catch (error) {
+                console.error('初始化失败:', error);
+                alert('初始化失败，请检查浏览器是否支持WebGL');
+            }
+        }
+
+        // ========== 事件监听设置 ==========
+        function setupEventListeners() {
+            // 窗口大小调整
+            window.addEventListener('resize', onWindowResize, { passive: true });
+
+            // 形状切换按钮
+            const changeBtn = document.getElementById('change-shape-btn');
+            if (changeBtn) {
+                changeBtn.addEventListener('click', nextShape);
+            }
+
+            // 颜色切换按钮
+            document.querySelectorAll('.color-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    // 移除所有active状态
+                    document.querySelectorAll('.color-btn').forEach(b => b.classList.remove('active'));
+                    // 添加当前active状态
+                    e.target.classList.add('active');
+                    // 切换颜色
+                    changeColor(e.target.dataset.color);
+                });
+            });
+
+            // 鼠标事件监听（用于控制旋转）
+            setupMouseControls();
+        }
+
+        // ========== 鼠标控制设置 ==========
+        function setupMouseControls() {
+            const canvas = renderer.domElement;
+
+            // 鼠标移动事件
+            canvas.addEventListener('mousemove', (e) => {
+                if (isMouseDown) {
+                    const deltaX = e.clientX - lastMouseX;
+                    const deltaY = e.clientY - lastMouseY;
+                    
+                    targetRotationY += deltaX * 0.005;
+                    targetRotationX += deltaY * 0.005;
+                    
+                    // 限制X轴旋转角度
+                    targetRotationX = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, targetRotationX));
+                }
+                
+                lastMouseX = e.clientX;
+                lastMouseY = e.clientY;
+            }, { passive: true });
+
+            // 鼠标按下事件
+            canvas.addEventListener('mousedown', (e) => {
+                isMouseDown = true;
+                lastMouseX = e.clientX;
+                lastMouseY = e.clientY;
+                canvas.style.cursor = 'grabbing';
+            });
+
+            // 鼠标释放事件
+            canvas.addEventListener('mouseup', () => {
+                isMouseDown = false;
+                canvas.style.cursor = 'grab';
+            });
+
+            // 鼠标离开画布
+            canvas.addEventListener('mouseleave', () => {
+                isMouseDown = false;
+                canvas.style.cursor = 'default';
+            });
+
+            // 初始光标样式
+            canvas.style.cursor = 'grab';
+        }
+
+        // ========== 粒子纹理生成 ==========
+        /**
+         * 创建发光粒子纹理
+         * @returns {THREE.Texture} 纹理对象
+         */
+        function getTexture() {
+            const canvas = document.createElement('canvas');
+            const size = 32;
+            canvas.width = size;
+            canvas.height = size;
+            
+            const context = canvas.getContext('2d');
+            const center = size / 2;
+            
+            // 创建径向渐变（从中心向外的发光效果）
+            const gradient = context.createRadialGradient(center, center, 0, center, center, center);
+            gradient.addColorStop(0, 'rgba(255,255,255,1)');
+            gradient.addColorStop(0.2, 'rgba(255,255,255,0.8)');
+            gradient.addColorStop(0.5, 'rgba(255,255,255,0.2)');
+            gradient.addColorStop(1, 'rgba(0,0,0,0)');
+            
+            context.fillStyle = gradient;
+            context.fillRect(0, 0, size, size);
+            
+            const texture = new THREE.Texture(canvas);
+            texture.needsUpdate = true;
+            return texture;
+        }
+
+        // ========== 创建粒子系统 ==========
+        function createParticles() {
+            if (!scene) return;
+
+            geometry = new THREE.BufferGeometry();
+            
+            // 初始形状：球体
+            const spherePoints = getSpherePoints(CONFIG.particleCount, 100);
+            
+            // 创建位置数组（使用Float32Array提升性能）
+            const positions = new Float32Array(spherePoints);
+            const colors = new Float32Array(CONFIG.particleCount * 3);
+            
+            // 初始化颜色（橙色）
+            const initialColor = COLOR_PALETTES.orange;
+            for (let i = 0; i < CONFIG.particleCount; i++) {
+                const idx = i * 3;
+                colors[idx] = initialColor.r;
+                colors[idx + 1] = initialColor.g;
+                colors[idx + 2] = initialColor.b;
+            }
+
+            // 设置几何体属性
+            geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+            // 初始化目标位置为当前位置，防止第一帧粒子乱飞
+            targetPositions = new Float32Array(positions);
+
+            // 创建粒子材质
+            const material = new THREE.PointsMaterial({
+                size: CONFIG.particleSize,
+                map: getTexture(),
+                vertexColors: true,
+                blending: THREE.AdditiveBlending,
+                depthWrite: false,
+                transparent: true,
+                opacity: 0.8,
+                sizeAttenuation: true
+            });
+
+            // 创建粒子系统
+            particles = new THREE.Points(geometry, material);
+            scene.add(particles);
+            
+            // 应用初始颜色
+            changeColor('orange');
+        }
+
+        // ========== 形状生成算法 ==========
+
+        /**
+         * 生成球体点云（均匀分布）
+         * @param {number} count - 点数
+         * @param {number} radius - 半径
+         * @returns {Float32Array} 位置数组
+         */
+        function getSpherePoints(count, radius) {
+            const arr = new Float32Array(count * 3);
+            for (let i = 0; i < count; i++) {
+                const phi = Math.acos(-1 + (2 * i) / count);
+                const theta = Math.sqrt(count * Math.PI) * phi;
+                const idx = i * 3;
+                arr[idx] = radius * Math.cos(theta) * Math.sin(phi);
+                arr[idx + 1] = radius * Math.sin(theta) * Math.sin(phi);
+                arr[idx + 2] = radius * Math.cos(phi);
+            }
+            return arr;
+        }
+
+        /**
+         * 生成立方体点云（随机分布）
+         * @param {number} count - 点数
+         * @param {number} size - 尺寸
+         * @returns {Float32Array} 位置数组
+         */
+        function getCubePoints(count, size) {
+            const arr = new Float32Array(count * 3);
+            const half = size * 0.5;
+            for (let i = 0; i < count; i++) {
+                const idx = i * 3;
+                arr[idx] = (Math.random() - 0.5) * size;
+                arr[idx + 1] = (Math.random() - 0.5) * size;
+                arr[idx + 2] = (Math.random() - 0.5) * size;
+            }
+            return arr;
+        }
+
+        /**
+         * 生成金字塔点云（锥体）
+         * @param {number} count - 点数
+         * @param {number} size - 尺寸
+         * @returns {Float32Array} 位置数组
+         */
+        function getPyramidPoints(count, size) {
+            const arr = new Float32Array(count * 3);
+            const half = size * 0.5;
+            for (let i = 0; i < count; i++) {
+                const h = Math.random() * size - half;
+                const r = (half - Math.abs(h)) * 0.8;
+                const angle = Math.random() * Math.PI * 2;
+                const r_random = Math.sqrt(Math.random()) * r; // 使用sqrt确保均匀分布
+                const idx = i * 3;
+                arr[idx] = Math.cos(angle) * r_random;
+                arr[idx + 1] = h;
+                arr[idx + 2] = Math.sin(angle) * r_random;
+            }
+            return arr;
+        }
+
+        /**
+         * 生成圆环点云（Torus）
+         * @param {number} count - 点数
+         * @param {number} R - 主半径
+         * @param {number} r - 次半径
+         * @returns {Float32Array} 位置数组
+         */
+        function getTorusPoints(count, R, r) {
+            const arr = new Float32Array(count * 3);
+            for (let i = 0; i < count; i++) {
+                const u = Math.random() * Math.PI * 2;
+                const v = Math.random() * Math.PI * 2;
+                const idx = i * 3;
+                arr[idx] = (R + r * Math.cos(v)) * Math.cos(u);
+                arr[idx + 1] = (R + r * Math.cos(v)) * Math.sin(u);
+                arr[idx + 2] = r * Math.sin(v);
+            }
+            return arr;
+        }
+
+        /**
+         * 生成星系点云（螺旋结构）
+         * @param {number} count - 点数
+         * @param {number} radius - 最大半径
+         * @returns {Float32Array} 位置数组
+         */
+        function getGalaxyPoints(count, radius) {
+            const arr = new Float32Array(count * 3);
+            const arms = 3; // 旋臂数量
+            for (let i = 0; i < count; i++) {
+                const progress = i / count;
+                const angle = progress * Math.PI * 4; // 螺旋角度
+                const r = progress * radius;
+                const armIndex = i % arms;
+                const armOffset = (armIndex / arms) * Math.PI * 2;
+                
+                const idx = i * 3;
+                arr[idx] = Math.cos(angle + armOffset) * r + (Math.random() - 0.5) * 10;
+                arr[idx + 1] = (Math.random() - 0.5) * (radius * 0.2);
+                arr[idx + 2] = Math.sin(angle + armOffset) * r + (Math.random() - 0.5) * 10;
+            }
+            return arr;
+        }
+
+        /**
+         * 生成波浪点云（正弦波表面）
+         * @param {number} count - 点数
+         * @param {number} size - 尺寸
+         * @returns {Float32Array} 位置数组
+         */
+        function getWavePoints(count, size) {
+            const arr = new Float32Array(count * 3);
+            const side = Math.ceil(Math.sqrt(count));
+            const step = size / side;
+            const offset = size * 0.5;
+            const frequency = 0.05;
+            const amplitude = 20;
+
+            for (let i = 0; i < count; i++) {
+                const x = (i % side) * step - offset;
+                const z = Math.floor(i / side) * step - offset;
+                const y = Math.sin(x * frequency) * amplitude + Math.cos(z * frequency) * amplitude;
+                const idx = i * 3;
+                arr[idx] = x;
+                arr[idx + 1] = y;
+                arr[idx + 2] = z;
+            }
+            return arr;
+        }
+
+        /**
+         * 生成"VRE"字符的3D点云（使用Canvas提取字符轮廓）
+         * @param {number} count - 点数
+         * @param {number} size - 尺寸（字符高度）
+         * @returns {Float32Array} 位置数组
+         */
+        function getVREPoints(count, size) {
+            const arr = new Float32Array(count * 3);
+            const charWidth = size * 0.35;
+            const charHeight = size * 0.7;
+            const charSpacing = size * 0.2;
+            const depth = size * 0.15;
+            
+            // 创建临时canvas用于字符渲染
+            const canvas = document.createElement('canvas');
+            canvas.width = 512;
+            canvas.height = 512;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = 'white';
+            ctx.font = 'bold 380px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+
+            let pointIndex = 0;
+            const chars = ['V', 'R', 'E'];
+            const pointsPerChar = Math.floor(count / 3);
+
+            chars.forEach((char, charIdx) => {
+                // 清空canvas
+                ctx.clearRect(0, 0, 512, 512);
+                // 绘制字符
+                ctx.fillText(char, 256, 256);
+                
+                // 获取像素数据
+                const imageData = ctx.getImageData(0, 0, 512, 512);
+                const data = imageData.data;
+                const charPoints = [];
+
+                // 采样字符像素（降低采样率提高性能）
+                for (let y = 0; y < 512; y += 4) {
+                    for (let x = 0; x < 512; x += 4) {
+                        const idx = (y * 512 + x) * 4;
+                        if (data[idx] > 128) { // 白色像素
+                            charPoints.push({
+                                x: (x / 512 - 0.5) * charWidth + (charIdx - 1) * (charWidth + charSpacing),
+                                y: (0.5 - y / 512) * charHeight,
+                                z: 0
+                            });
+                        }
+                    }
+                }
+
+                // 为字符点生成3D体积（添加深度和随机分布）
+                const pointsToGenerate = Math.min(pointsPerChar, charPoints.length * 8);
+                for (let i = 0; i < pointsToGenerate && pointIndex < count; i++) {
+                    const basePoint = charPoints[Math.floor((i / 8) % charPoints.length)];
+                    const idx = pointIndex * 3;
+                    
+                    // 在基础点周围添加3D深度
+                    arr[idx] = basePoint.x + (Math.random() - 0.5) * depth * 2;
+                    arr[idx + 1] = basePoint.y + (Math.random() - 0.5) * depth * 2;
+                    arr[idx + 2] = (Math.random() - 0.5) * depth * 2;
+                    
+                    pointIndex++;
+                }
+            });
+
+            // 如果点数不够，用随机点填充
+            while (pointIndex < count) {
+                const idx = pointIndex * 3;
+                arr[idx] = (Math.random() - 0.5) * size * 1.5;
+                arr[idx + 1] = (Math.random() - 0.5) * charHeight * 1.2;
+                arr[idx + 2] = (Math.random() - 0.5) * depth * 2;
+                pointIndex++;
+            }
+
+            return arr;
+        }
+
+        // ========== 变形逻辑 ==========
+        function nextShape() {
+            currentShapeIndex = (currentShapeIndex + 1) % SHAPES.length;
+            const shape = SHAPES[currentShapeIndex];
+            
+            // 更新 UI
+            const shapeNameEl = document.getElementById('shape-name');
+            if (shapeNameEl) {
+                shapeNameEl.innerText = shape.name.charAt(0).toUpperCase() + shape.name.slice(1);
+            }
+
+            // 显示变形状态提示
+            const statusEl = document.getElementById('morph-status');
+            if (statusEl) {
+                statusEl.classList.add('show');
+                setTimeout(() => statusEl.classList.remove('show'), 1500);
+            }
+
+            // 计算新坐标
+            let newPositions;
+            switch(shape.name) {
+                case 'sphere':
+                    newPositions = getSpherePoints(CONFIG.particleCount, shape.params[0]);
+                    break;
+                case 'cube':
+                    newPositions = getCubePoints(CONFIG.particleCount, shape.params[0]);
+                    break;
+                case 'pyramid':
+                    newPositions = getPyramidPoints(CONFIG.particleCount, shape.params[0]);
+                    break;
+                case 'torus':
+                    newPositions = getTorusPoints(CONFIG.particleCount, shape.params[0], shape.params[1]);
+                    break;
+                case 'galaxy':
+                    newPositions = getGalaxyPoints(CONFIG.particleCount, shape.params[0]);
+                    break;
+                case 'wave':
+                    newPositions = getWavePoints(CONFIG.particleCount, shape.params[0]);
+                    break;
+                case 'VRE':
+                    newPositions = getVREPoints(CONFIG.particleCount, shape.params[0]);
+                    break;
+                default:
+                    newPositions = getSpherePoints(CONFIG.particleCount, 120);
+            }
+
+            targetPositions = newPositions;
+            
+            // 如果处于彩虹模式，需要重新计算颜色分布
+            if (currentColorMode === 'rainbow') {
+                updateRainbowColors(newPositions);
+            }
+        }
+
+        // ========== 颜色处理 ==========
+        function changeColor(mode) {
+            if (!geometry || !geometry.attributes.color) return;
+            
+            currentColorMode = mode;
+            const colors = geometry.attributes.color.array;
+            
+            if (mode === 'rainbow') {
+                // 基于当前目标位置计算彩虹色
+                updateRainbowColors(targetPositions.length > 0 ? targetPositions : geometry.attributes.position.array);
+            } else {
+                const targetColor = COLOR_PALETTES[mode];
+                if (!targetColor) return;
+                
+                // 批量设置颜色（性能优化）
+                for (let i = 0; i < CONFIG.particleCount; i++) {
+                    const idx = i * 3;
+                    colors[idx] = targetColor.r;
+                    colors[idx + 1] = targetColor.g;
+                    colors[idx + 2] = targetColor.b;
+                }
+                geometry.attributes.color.needsUpdate = true;
+            }
+        }
+
+        /**
+         * 更新彩虹色模式（基于位置的HSV到RGB转换）
+         * @param {Float32Array|Array} positions - 位置数组
+         */
+        function updateRainbowColors(positions) {
+            if (!geometry || !geometry.attributes.color) return;
+            
+            const colors = geometry.attributes.color.array;
+            const maxRange = 200; // 归一化范围
+            
+            for (let i = 0; i < CONFIG.particleCount; i++) {
+                const idx = i * 3;
+                const x = positions[idx];
+                const y = positions[idx + 1];
+                const z = positions[idx + 2];
+                
+                // 使用3D位置计算色相（Hue）
+                const distance = Math.sqrt(x * x + y * y + z * z);
+                const hue = (distance / maxRange + Math.atan2(y, x) / (Math.PI * 2)) % 1;
+                
+                // HSV到RGB转换
+                const rgb = hsvToRgb(hue, 1.0, 1.0);
+                colors[idx] = rgb.r;
+                colors[idx + 1] = rgb.g;
+                colors[idx + 2] = rgb.b;
+            }
+            geometry.attributes.color.needsUpdate = true;
+        }
+
+        /**
+         * HSV到RGB转换
+         * @param {number} h - 色相 (0-1)
+         * @param {number} s - 饱和度 (0-1)
+         * @param {number} v - 明度 (0-1)
+         * @returns {Object} RGB对象 {r, g, b} (0-1范围)
+         */
+        function hsvToRgb(h, s, v) {
+            const i = Math.floor(h * 6);
+            const f = h * 6 - i;
+            const p = v * (1 - s);
+            const q = v * (1 - f * s);
+            const t = v * (1 - (1 - f) * s);
+            let r, g, b;
+            
+            switch (i % 6) {
+                case 0: r = v; g = t; b = p; break;
+                case 1: r = q; g = v; b = p; break;
+                case 2: r = p; g = v; b = t; break;
+                case 3: r = p; g = q; b = v; break;
+                case 4: r = t; g = p; b = v; break;
+                case 5: r = v; g = p; b = q; break;
+            }
+            
+            return { r, g, b };
+        }
+
+        // ========== 动画循环 ==========
+        function animate() {
+            animationFrameId = requestAnimationFrame(animate);
+
+            if (!geometry || !particles) return;
+
+            const positions = geometry.attributes.position.array;
+            
+            // 1. 粒子插值运动（平滑过渡到目标位置）
+            const speed = CONFIG.morphSpeed;
+            for (let i = 0; i < CONFIG.particleCount; i++) {
+                const idx = i * 3;
+                
+                // 线性插值：current += (target - current) * speed
+                positions[idx] += (targetPositions[idx] - positions[idx]) * speed;
+                positions[idx + 1] += (targetPositions[idx + 1] - positions[idx + 1]) * speed;
+                positions[idx + 2] += (targetPositions[idx + 2] - positions[idx + 2]) * speed;
+            }
+            geometry.attributes.position.needsUpdate = true;
+
+            // 2. 旋转控制（鼠标控制 + 平滑插值）
+            if (isMouseDown) {
+                // 鼠标拖动时直接使用目标旋转
+                particles.rotation.y = targetRotationY;
+                particles.rotation.x = targetRotationX;
+            } else {
+                // 平滑插值到目标旋转（惯性效果）
+                particles.rotation.y += (targetRotationY - particles.rotation.y) * 0.08;
+                particles.rotation.x += (targetRotationX - particles.rotation.x) * 0.08;
+                
+                // 如果没有鼠标交互且旋转已稳定，添加轻微的自转
+                const rotationDiff = Math.abs(targetRotationY - particles.rotation.y);
+                if (rotationDiff < 0.01 && !isMouseDown) {
+                    targetRotationY += CONFIG.rotationSpeed * 0.5;
+                }
+            }
+
+            // 3. 动态更新彩虹色（仅在波浪模式下实时更新，增强视觉效果）
+            if (currentColorMode === 'rainbow' && SHAPES[currentShapeIndex].name === 'wave') {
+                updateRainbowColors(positions);
+            }
+
+            // 4. 渲染场景
+            renderer.render(scene, camera);
+        }
+
+        // ========== 窗口大小调整 ==========
+        function onWindowResize() {
+            if (!camera || !renderer) return;
+
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        // 启动
+        init();
+
+    </script>
+</body>
+</html>
